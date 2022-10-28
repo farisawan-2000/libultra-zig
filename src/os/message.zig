@@ -97,14 +97,14 @@ pub fn JamMesg(mq: *OSMesgQueue, msg: OSMesg, flag: blockflag) i32 {
     mq.*.validCount += 1;
 
     if (mq.*.mtqueue.p.?.*.next != null) {
-        thread.StartThread(thread.__.PopThread(&mq.*.mtqueue.pp.?));
+        thread.StartThread(thread.__.PopThread(&mq.*.mtqueue.p));
     }
     
     interrupt.__.RestoreInt(saveMask);
     return 0;
 }
 
-pub fn RecvMesg(mq: *OSMesgQueue, msg: *OSMesg, flags: blockflag) i32 {
+pub fn RecvMesg(mq: *OSMesgQueue, msg: ?*OSMesg, flags: blockflag) i32 {
     var saveMask : u32 = interrupt.__.DisableInt();
 
     while (mq.*.validCount == 0) {
@@ -118,13 +118,13 @@ pub fn RecvMesg(mq: *OSMesgQueue, msg: *OSMesg, flags: blockflag) i32 {
     }
 
     if (msg != null) {
-        msg.* = mq.*.msg[mq.*.first];
+        msg.?.* = mq.*.msg[mq.*.first];
     }
 
     mq.*.first = (mq.*.first + 1) % mq.*.msgCount;
     mq.*.validCount -= 1;
 
-    if (mq.*.fullqueue.p.*.next != null) {
+    if (mq.*.fullqueue.p.?.*.next != null) {
         thread.StartThread(thread.__.PopThread(&mq.*.fullqueue.p));
     }
     
