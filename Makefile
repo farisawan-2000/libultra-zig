@@ -1,0 +1,1 @@
+zig build-obj -target mips-linux-gnu -mcpu mips2 -OReleaseSmall -I include src/os/message.zig
