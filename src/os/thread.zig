@@ -29,8 +29,9 @@ const __OSThreadprofile = struct {
 };
 
 pub const ThreadState = enum {
-    WAITING,
     STOPPED,
+    WAITING,
+    RUNNABLE,
 };
 
 pub const OSThread = struct {
@@ -45,8 +46,6 @@ pub const OSThread = struct {
     thprof : *__OSThreadprofile,
     context : __OSThreadContext,
 };
-
-pub extern fn StartThread(t: *OSThread) void;
 
 pub const __ = @import("internal/thread.zig");
 pub const r4300 = @import("internal/r4300.zig");
@@ -71,10 +70,9 @@ pub fn CreateThread(t: *OSThread, id: OSId, entry: *const fn(a: ?*anyopaque) voi
     t.*.context.sp = @ptrToInt(sp) - 16;
     t.*.context.ra = @ptrToInt(&__.CleanupThread);
     mask = OS_IM_ALL;
-    t.*.context.sr = @enumToInt(r4300.StatusFlags.SR_IMASK) | @enumToInt(r4300.StatusFlags.SR_EXL);
-        // | @enumToInt(r4300.StatusFlags.SR_IE);
-    // t.*.context.rcp = (mask & & RCP_IMASK) >> RCP_IMASKSHIFT;
-    // t.*.context.fpcsr = (r4300.FPCSR_FS | r4300.FPCSR_EV);
+    t.*.context.sr = r4300.SR_IMASK | r4300.SR_EXL | r4300.SR_IE;
+    t.*.context.rcp = (mask & RCP_IMASK) >> RCP_IMASKSHIFT;
+    t.*.context.fpcsr = (r4300.FPCSR_FS | r4300.FPCSR_EV);
     t.*.fp = 0;
     t.*.state = ThreadState.STOPPED;
     t.*.flags = 0;
@@ -84,3 +82,35 @@ pub fn CreateThread(t: *OSThread, id: OSId, entry: *const fn(a: ?*anyopaque) voi
     interrupt.__.RestoreInt(saveMask);
 }
 
+pub fn StartThread(t: *OSThread) void {
+    var saveMask : u32 = interrupt.__.DisableInt();
+    
+    switch (t.*.state) {
+        ThreadState.WAITING => {
+            t.*.state = ThreadState.RUNNABLE;
+            __.EnqueueThread(&__.RunQueue, t);
+        },
+        ThreadState.STOPPED => {
+            if (t.*.queue == null or t.*.queue == &__.RunQueue) {
+                t.*.state = ThreadState.RUNNABLE;
+                __.EnqueueThread(&__.RunQueue, t);
+            } else {
+                t.*.state = ThreadState.WAITING;
+                __.EnqueueThread(t.*.queue.?, t);
+                __.EnqueueThread(&__.RunQueue, __.PopThread(t.*.queue.?));
+            }
+        },
+        else => {
+
+        },
+    }
+
+    if (__.RunningThread == null) {
+        __.DispatchThread();
+    } else if (__.RunningThread.?.*.priority < __.RunQueue.?.*.priority) {
+        __.RunningThread.?.*.state = ThreadState.RUNNABLE;
+        __.EnqueueAndYield(&__.RunQueue);
+    }
+
+    interrupt.__.RestoreInt(saveMask);
+}
