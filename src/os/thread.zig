@@ -30,13 +30,14 @@ const __OSThreadprofile = struct {
 
 pub const ThreadState = enum {
     WAITING,
+    STOPPED,
 };
 
 pub const OSThread = struct {
     next : ?*OSThread,
     priority : OSPri,
-    queue : **OSThread,
-    tlnext: *OSThread,
+    queue : ?*?*OSThread,
+    tlnext: ?*OSThread,
     state : ThreadState,
     flags : u16,
     id : OSId,
@@ -48,4 +49,38 @@ pub const OSThread = struct {
 pub extern fn StartThread(t: *OSThread) void;
 
 pub const __ = @import("internal/thread.zig");
+pub const r4300 = @import("internal/r4300.zig");
+pub const interrupt = @import("interrupt.zig");
+
+pub const OS_IM_ALL : u32 = 0x003fff01;
+
+
+// TODO: other files
+pub const RCP_IMASK : u32 = 0x003f0000;
+pub const RCP_IMASKSHIFT : u32 = 16;
+
+pub fn CreateThread(t: *OSThread, id: OSId, entry: *const fn(a: ?*anyopaque) void, arg: ?*anyopaque, sp: *u8, p: OSPri) void {
+    var saveMask : u32 = 0;
+    var mask : u32 = 0;
+    t.*.id = id;
+    t.*.priority = p;
+    t.*.next = null;
+    t.*.queue = null;
+    t.*.context.pc = @ptrToInt(entry);
+    t.*.context.a0 = @ptrToInt(arg);
+    t.*.context.sp = @ptrToInt(sp) - 16;
+    t.*.context.ra = @ptrToInt(&__.CleanupThread);
+    mask = OS_IM_ALL;
+    t.*.context.sr = @enumToInt(r4300.StatusFlags.SR_IMASK) | @enumToInt(r4300.StatusFlags.SR_EXL);
+        // | @enumToInt(r4300.StatusFlags.SR_IE);
+    // t.*.context.rcp = (mask & & RCP_IMASK) >> RCP_IMASKSHIFT;
+    // t.*.context.fpcsr = (r4300.FPCSR_FS | r4300.FPCSR_EV);
+    t.*.fp = 0;
+    t.*.state = ThreadState.STOPPED;
+    t.*.flags = 0;
+    saveMask = interrupt.__.DisableInt();
+    t.*.tlnext = __.ActiveQueue;
+    __.ActiveQueue = t;
+    interrupt.__.RestoreInt(saveMask);
+}
 

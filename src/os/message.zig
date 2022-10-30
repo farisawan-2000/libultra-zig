@@ -132,17 +132,7 @@ pub fn RecvMesg(mq: *OSMesgQueue, msg: ?*OSMesg, flags: blockflag) i32 {
     return 0;
 }
 
-pub export fn boot() void {
-    var m : OSMesgQueue = undefined;
-    var ms : OSMesg = undefined;
 
-    var msa : [8]OSMesg = undefined;
-
-    CreateMesgQueue(&m, &msa, 8);
-    _ = SendMesg(&m, ms, blockflag.BLOCK);
-    _ = JamMesg(&m, ms, blockflag.BLOCK);
-    _ = RecvMesg(&m, &ms, blockflag.BLOCK);
-}
 
 pub const __OSEventState = struct{    
     messageQueue : *OSMesgQueue,
